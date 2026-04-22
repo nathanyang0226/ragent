@@ -5,12 +5,10 @@ on:
     branches:
       - main
       - chore/static-analysis
-      - develop
   pull_request:
     branches:
       - main
       - chore/static-analysis
-      - develop
   workflow_dispatch:
 
 permissions:
