@@ -42,6 +42,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: analysis-reports
-          path: target/*-report.xml
+          path: target/reports/checkstyle.html  # 修改为实际生成的 HTML 文件路径
           retention-days: 7
           if-no-files-found: warn
