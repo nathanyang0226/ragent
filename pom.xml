@@ -42,6 +42,20 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <dependency-check.data.dir>${user.home}/.dependency-check-data</dependency-check.data.dir>
+
+        <sonar.host.url>http://192.168.15.121:19000</sonar.host.url>
+
+        <sonar.java.checkstyle.reportPaths>
+            bootstrap/target/checkstyle-result.xml,framework/target/checkstyle-result.xml,infra-ai/target/checkstyle-result.xml,mcp-server/target/checkstyle-result.xml
+        </sonar.java.checkstyle.reportPaths>
+
+        <sonar.java.pmd.reportPaths>
+            bootstrap/target/pmd.xml,framework/target/pmd.xml,infra-ai/target/pmd.xml,mcp-server/target/pmd.xml
+        </sonar.java.pmd.reportPaths>
+
+        <sonar.java.spotbugs.reportPaths>
+            bootstrap/target/spotbugsXml.xml,framework/target/spotbugsXml.xml,infra-ai/target/spotbugsXml.xml,mcp-server/target/spotbugsXml.xml
+        </sonar.java.spotbugs.reportPaths>
     </properties>
 
     <modules>
