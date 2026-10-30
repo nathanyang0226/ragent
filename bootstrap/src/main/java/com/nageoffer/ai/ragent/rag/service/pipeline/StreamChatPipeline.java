@@ -76,23 +76,38 @@ public class StreamChatPipeline {
      * 执行流式对话管道
      */
     public void execute(StreamChatContext ctx) {
-        loadMemory(ctx);
-        rewriteQuery(ctx);
-        resolveIntents(ctx);
+        long startedAt = System.nanoTime();
+        log.info("[RAG] Pipeline started: taskId={}, conversationId={}, questionLength={}, deepThinking={}",
+                ctx.getTaskId(), ctx.getConversationId(),
+                ctx.getQuestion() == null ? 0 : ctx.getQuestion().length(), ctx.isDeepThinking());
+        try {
+            loadMemory(ctx);
+            rewriteQuery(ctx);
+            resolveIntents(ctx);
 
-        if (handleGuidance(ctx)) {
-            return;
-        }
-        if (handleSystemOnly(ctx)) {
-            return;
-        }
+            if (handleGuidance(ctx)) {
+                log.info("[RAG] Pipeline short-circuited by ambiguity guidance: taskId={}", ctx.getTaskId());
+                return;
+            }
+            if (handleSystemOnly(ctx)) {
+                log.info("[RAG] Pipeline routed to system-only response: taskId={}", ctx.getTaskId());
+                return;
+            }
 
-        RetrievalContext retrievalCtx = retrieve(ctx);
-        if (handleEmptyRetrieval(ctx, retrievalCtx)) {
-            return;
-        }
+            RetrievalContext retrievalCtx = retrieve(ctx);
+            if (handleEmptyRetrieval(ctx, retrievalCtx)) {
+                log.info("[RAG] Pipeline completed with empty retrieval: taskId={}", ctx.getTaskId());
+                return;
+            }
 
-        streamRagResponse(ctx, retrievalCtx);
+            streamRagResponse(ctx, retrievalCtx);
+        } catch (RuntimeException e) {
+            log.error("[RAG] Pipeline failed: taskId={}", ctx.getTaskId(), e);
+            throw e;
+        } finally {
+            log.info("[RAG] Pipeline dispatch completed: taskId={}, elapsedMs={}",
+                    ctx.getTaskId(), (System.nanoTime() - startedAt) / 1_000_000);
+        }
     }
 
     // ==================== 流水线阶段 ====================
@@ -104,16 +119,25 @@ public class StreamChatPipeline {
                 ChatMessage.user(ctx.getQuestion())
         );
         ctx.setHistory(history);
+        log.debug("[RAG] Memory loaded: taskId={}, historyMessageCount={}", ctx.getTaskId(),
+                history == null ? 0 : history.size());
     }
 
     private void rewriteQuery(StreamChatContext ctx) {
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(ctx.getQuestion(), ctx.getHistory());
         ctx.setRewriteResult(rewriteResult);
+        log.info("[RAG] Query rewrite completed: taskId={}, subQuestionCount={}, rewrittenLength={}",
+                ctx.getTaskId(),
+                rewriteResult.subQuestions() == null ? 0 : rewriteResult.subQuestions().size(),
+                rewriteResult.rewrittenQuestion() == null ? 0 : rewriteResult.rewrittenQuestion().length());
     }
 
     private void resolveIntents(StreamChatContext ctx) {
         List<SubQuestionIntent> subIntents = intentResolver.resolve(ctx.getRewriteResult());
         ctx.setSubIntents(subIntents);
+        log.info("[RAG] Intent resolution completed: taskId={}, subQuestionCount={}, intentCount={}",
+                ctx.getTaskId(), subIntents.size(),
+                subIntents.stream().mapToInt(si -> si.nodeScores().size()).sum());
     }
 
     private boolean handleGuidance(StreamChatContext ctx) {
@@ -154,7 +178,15 @@ public class StreamChatPipeline {
     }
 
     private RetrievalContext retrieve(StreamChatContext ctx) {
-        return retrievalEngine.retrieve(ctx.getSubIntents(), searchProperties.getDefaultTopK());
+        long startedAt = System.nanoTime();
+        RetrievalContext result = retrievalEngine.retrieve(ctx.getSubIntents(), searchProperties.getDefaultTopK());
+        log.info("[RAG] Retrieval completed: taskId={}, topK={}, intentChunkGroups={}, kbContextLength={}, mcpContextLength={}, elapsedMs={}",
+                ctx.getTaskId(), searchProperties.getDefaultTopK(),
+                result.getIntentChunks() == null ? 0 : result.getIntentChunks().size(),
+                result.getKbContext() == null ? 0 : result.getKbContext().length(),
+                result.getMcpContext() == null ? 0 : result.getMcpContext().length(),
+                (System.nanoTime() - startedAt) / 1_000_000);
+        return result;
     }
 
     private boolean handleEmptyRetrieval(StreamChatContext ctx, RetrievalContext retrievalCtx) {
@@ -230,6 +262,13 @@ public class StreamChatPipeline {
                 .topP(ctx.hasMcp() ? 0.8D : 1D)
                 .build();
 
+        log.info("[RAG] Prompt assembled: messages={}, historyMessages={}, kbEvidenceLength={}, mcpEvidenceLength={}, questionLength={}, deepThinking={}",
+                messages.size(), history == null ? 0 : history.size(),
+                ctx.getKbContext() == null ? 0 : ctx.getKbContext().length(),
+                ctx.getMcpContext() == null ? 0 : ctx.getMcpContext().length(),
+                rewriteResult.rewrittenQuestion() == null ? 0 : rewriteResult.rewrittenQuestion().length(),
+                deepThinking);
+        log.info("[RAG] Starting streaming LLM response");
         return llmService.streamChat(chatRequest, callback);
     }
 }

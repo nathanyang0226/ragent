@@ -112,6 +112,9 @@ public class BaiLianRerankClient implements RerankClient {
                 .addHeader("Authorization", "Bearer " + provider.getApiKey())
                 .build();
 
+        long startedAt = System.nanoTime();
+        log.debug("[RERANK] Calling provider: provider={}, model={}, candidateCount={}, topN={}",
+                provider(), target.candidate().getModel(), candidates.size(), topN);
         JsonObject respJson;
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
@@ -124,6 +127,8 @@ public class BaiLianRerankClient implements RerankClient {
                 );
             }
             respJson = HttpResponseHelper.parseJson(response.body(), provider());
+            log.info("[RERANK] Provider response received: provider={}, httpStatus={}, elapsedMs={}",
+                    provider(), response.code(), (System.nanoTime() - startedAt) / 1_000_000);
         } catch (IOException e) {
             throw new ModelClientException(provider() + " rerank 请求失败: " + e.getMessage(), ModelClientErrorType.NETWORK_ERROR, null, e);
         }
@@ -180,6 +185,8 @@ public class BaiLianRerankClient implements RerankClient {
             }
         }
 
+        log.debug("[RERANK] Provider result parsed: provider={}, inputCount={}, outputCount={}",
+                provider(), candidates.size(), reranked.size());
         return reranked;
     }
 

@@ -69,7 +69,20 @@ public class IntentResolver {
         List<SubQuestionIntent> subIntents = tasks.stream()
                 .map(CompletableFuture::join)
                 .toList();
-        return capTotalIntents(subIntents);
+        List<SubQuestionIntent> capped = capTotalIntents(subIntents);
+        log.info("[INTENT] Resolution completed: subQuestionCount={}, intentCount={}",
+                capped.size(), capped.stream().mapToInt(si -> si.nodeScores().size()).sum());
+        if (log.isDebugEnabled()) {
+            capped.forEach(si -> si.nodeScores().forEach(ns -> {
+                if (ns.getNode() != null) {
+                    log.debug("[INTENT] subQuestionLength={}, nodeId={}, nodeName={}, collectionName={}, score={}",
+                            si.subQuestion() == null ? 0 : si.subQuestion().length(),
+                            ns.getNode().getId(), ns.getNode().getName(),
+                            ns.getNode().getCollectionName(), ns.getScore());
+                }
+            }));
+        }
+        return capped;
     }
 
     public IntentGroup mergeIntentGroup(List<SubQuestionIntent> subIntents) {

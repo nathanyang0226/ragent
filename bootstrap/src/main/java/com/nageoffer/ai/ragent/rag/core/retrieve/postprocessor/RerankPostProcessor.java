@@ -66,10 +66,19 @@ public class RerankPostProcessor implements SearchResultPostProcessor {
             return chunks;
         }
 
-        return rerankService.rerank(
+        long startedAt = System.nanoTime();
+        log.info("[RERANK] Started: inputChunkCount={}, topN={}", chunks.size(), context.getTopK());
+        List<RetrievedChunk> reranked = rerankService.rerank(
                 context.getMainQuestion(),
                 chunks,
                 context.getTopK()
         );
+        log.info("[RERANK] Completed: inputChunkCount={}, outputChunkCount={}, elapsedMs={}",
+                chunks.size(), reranked.size(), (System.nanoTime() - startedAt) / 1_000_000);
+        if (log.isDebugEnabled()) {
+            reranked.forEach(chunk -> log.debug("[RERANK] Result: chunkId={}, score={}, textLength={}",
+                    chunk.getId(), chunk.getScore(), chunk.getText() == null ? 0 : chunk.getText().length()));
+        }
+        return reranked;
     }
 }

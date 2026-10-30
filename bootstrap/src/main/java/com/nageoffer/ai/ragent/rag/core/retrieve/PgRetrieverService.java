@@ -38,8 +38,11 @@ public class PgRetrieverService implements RetrieverService {
 
     @Override
     public List<RetrievedChunk> retrieve(RetrieveRequest request) {
+        long startedAt = System.nanoTime();
         List<Float> embedding = embeddingService.embed(request.getQuery());
         float[] vector = normalize(toArray(embedding));
+        log.debug("[VECTOR] Query embedding created: collectionName={}, dimension={}, embeddingLatencyMs={}",
+                request.getCollectionName(), vector.length, (System.nanoTime() - startedAt) / 1_000_000);
         return retrieveByVector(vector, request);
     }
 
@@ -50,8 +53,11 @@ public class PgRetrieverService implements RetrieverService {
         jdbcTemplate.execute("SET hnsw.ef_search = 200");
 
         String vectorLiteral = toVectorLiteral(vector);
+        long startedAt = System.nanoTime();
+        log.debug("[VECTOR] Search started: collectionName={}, dimension={}, topK={}, efSearch=200",
+                request.getCollectionName(), vector.length, request.getTopK());
         // noinspection SqlDialectInspection,SqlNoDataSourceInspection
-        return jdbcTemplate.query("SELECT id, content, 1 - (embedding <=> ?::vector) AS score FROM t_knowledge_vector WHERE metadata->>'collection_name' = ? ORDER BY embedding <=> ?::vector LIMIT ?",
+        List<RetrievedChunk> chunks = jdbcTemplate.query("SELECT id, content, 1 - (embedding <=> ?::vector) AS score FROM t_knowledge_vector WHERE metadata->>'collection_name' = ? ORDER BY embedding <=> ?::vector LIMIT ?",
                 (rs, rowNum) -> RetrievedChunk.builder()
                         .id(rs.getString("id"))
                         .text(rs.getString("content"))
@@ -59,6 +65,14 @@ public class PgRetrieverService implements RetrieverService {
                         .build(),
                 vectorLiteral, request.getCollectionName(), vectorLiteral, request.getTopK()
         );
+        log.info("[VECTOR] Search completed: collectionName={}, requestedTopK={}, retrievedCount={}, elapsedMs={}",
+                request.getCollectionName(), request.getTopK(), chunks.size(),
+                (System.nanoTime() - startedAt) / 1_000_000);
+        if (log.isDebugEnabled()) {
+            chunks.forEach(chunk -> log.debug("[VECTOR] Retrieved chunk: chunkId={}, score={}, textLength={}",
+                    chunk.getId(), chunk.getScore(), chunk.getText() == null ? 0 : chunk.getText().length()));
+        }
+        return chunks;
     }
 
     private float[] normalize(float[] vector) {

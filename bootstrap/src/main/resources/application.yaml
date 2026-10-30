@@ -1,3 +1,7 @@
+logging:
+  file:
+    path: ${RAGENT_LOG_PATH:${user.dir}/logs}
+
 server:
   port: 9090
   servlet:

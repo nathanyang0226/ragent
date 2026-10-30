@@ -24,6 +24,7 @@ import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentNode;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.RAG_ENTERPRISE_PR
  * <p>
  * 根据检索结果场景（KB / MCP / Mixed）选择模板，并构造最终发送给 LLM 的消息序列
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RAGPromptService {
@@ -89,6 +91,10 @@ public class RAGPromptService {
             messages.add(ChatMessage.user(userContent));
         }
 
+        log.info("[PROMPT] Messages assembled: scene={}, messageCount={}, historyMessageCount={}, systemPromptLength={}, evidenceLength={}, userContentLength={}",
+                context.hasMcp() && context.hasKb() ? "MIXED" : context.hasKb() ? "KB_ONLY" : "MCP_ONLY",
+                messages.size(), history == null ? 0 : history.size(),
+                systemPrompt.length(), evidenceBody.length(), userContent.length());
         return messages;
     }
 
